@@ -1,0 +1,13 @@
+bam	flags	orig_ms	fork_seq_ms	fork_par_ms	orig_kept	fork_kept	match
+forward_test.bam		329	308	309	2	2	MATCH
+reverse_test.bam		296	296	340	3	3	MATCH
+forward_unmerged_duplicate_must_overlap.bam		338	326	324	2	3	DIFF
+reverse_unmerged_duplicate_must_overlap.bam		364	320	295	2	3	DIFF
+all_reads_as_merged_test.bam	-m	315	310	299	3	3	DIFF
+mapq_zero_test.bam		301	303	300	2	2	MATCH
+stack_test.bam		311	293	299	14	16	DIFF
+stack_read_one_test.bam		328	318	299	10	11	DIFF
+stack_read_two_test.bam		344	300	307	10	11	DIFF
+strand_forward.bam		358	319	297	2	2	MATCH
+strand_reverse.bam		309	310	309	2	2	MATCH
+yield_test.bam		384	330	315	22	35	DIFF
