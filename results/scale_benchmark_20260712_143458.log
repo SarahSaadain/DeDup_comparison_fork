@@ -1,0 +1,83 @@
+[14:34:58] Original JAR: DeDup-0.12.9.jar
+[14:34:58] Fork JAR:     DeDup-0.13.0.jar
+[14:34:58] ── scale=5000000 (5M reads) ──
+[14:34:58]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_5M_15contigs.bam ...
+  chr1: length=31,113,820 target=518,564 written=518,447
+  chr2: length=30,268,614 target=504,477 written=504,461
+  chr3: length=24,782,379 target=413,040 written=413,046
+  chr4: length=23,772,439 target=396,207 written=396,177
+  chr5: length=22,688,102 target=378,135 written=377,954
+  chr6: length=21,346,814 target=355,780 written=355,542
+  chr7: length=19,914,577 target=331,910 written=331,811
+  chr8: length=18,138,987 target=302,316 written=302,308
+  chr9: length=17,296,153 target=288,269 written=288,193
+  chr10: length=16,721,597 target=278,693 written=278,521
+  chr11: length=16,882,717 target=281,379 written=281,248
+  chr12: length=16,656,345 target=277,606 written=277,535
+  chr13: length=14,292,907 target=238,215 written=237,923
+  chr14: length=13,378,000 target=222,967 written=222,849
+  chr15: length=12,746,550 target=212,442 written=212,339
+
+Done: 4,998,354 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_5M_15contigs.bam
+  M_=1,668,238 F_=1,665,058 R_=1,665,058 clusters=1,446,300 mean_cluster_size=3.46
+[14:35:46]   indexing...
+[14:35:48]   running original...
+[14:36:08]   running fork -t1...
+[14:36:21]   running fork -t8...
+[14:36:57]   orig=19629ms fork-seq=13231ms(1.48x) fork-par=13729ms(1.43x) match=MATCH
+[14:36:57] ── scale=25000000 (25M reads) ──
+[14:36:57]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_25M_15contigs.bam ...
+  chr1: length=31,113,820 target=2,592,818 written=2,584,532
+  chr2: length=30,268,614 target=2,522,384 written=2,519,164
+  chr3: length=24,782,379 target=2,065,198 written=2,057,731
+  chr4: length=23,772,439 target=1,981,037 written=1,974,191
+  chr5: length=22,688,102 target=1,890,675 written=1,884,492
+  chr6: length=21,346,814 target=1,778,901 written=1,774,005
+  chr7: length=19,914,577 target=1,659,548 written=1,653,326
+  chr8: length=18,138,987 target=1,511,582 written=1,508,680
+  chr9: length=17,296,153 target=1,441,346 written=1,438,648
+  chr10: length=16,721,597 target=1,393,466 written=1,390,791
+  chr11: length=16,882,717 target=1,406,893 written=1,402,106
+  chr12: length=16,656,345 target=1,388,029 written=1,386,640
+  chr13: length=14,292,907 target=1,191,076 written=1,188,033
+  chr14: length=13,378,000 target=1,114,833 written=1,112,113
+  chr15: length=12,746,550 target=1,062,212 written=1,060,520
+
+Done: 24,934,972 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_25M_15contigs.bam
+  M_=8,330,744 F_=8,302,114 R_=8,302,114 clusters=1,445,863 mean_cluster_size=17.25
+[14:39:53]   indexing...
+[14:40:01]   running original...
+[14:41:07]   running fork -t1...
+[14:41:37]   running fork -t8...
+[14:42:17]   orig=65729ms fork-seq=30460ms(2.16x) fork-par=19034ms(3.45x) match=MATCH
+[14:42:17] ── scale=50000000 (50M reads) ──
+[14:42:17]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_50M_15contigs.bam ...
+  chr1: length=31,113,820 target=5,185,637 written=5,100,985
+  chr2: length=30,268,614 target=5,044,769 written=4,957,331
+  chr3: length=24,782,379 target=4,130,396 written=4,072,220
+  chr4: length=23,772,439 target=3,962,073 written=3,900,655
+  chr5: length=22,688,102 target=3,781,350 written=3,715,158
+  chr6: length=21,346,814 target=3,557,802 written=3,506,540
+  chr7: length=19,914,577 target=3,319,096 written=3,268,282
+  chr8: length=18,138,987 target=3,023,164 written=2,973,307
+  chr9: length=17,296,153 target=2,882,692 written=2,838,575
+  chr10: length=16,721,597 target=2,786,933 written=2,746,113
+  chr11: length=16,882,717 target=2,813,786 written=2,774,896
+  chr12: length=16,656,345 target=2,776,057 written=2,727,559
+  chr13: length=14,292,907 target=2,382,151 written=2,346,979
+  chr14: length=13,378,000 target=2,229,667 written=2,196,738
+  chr15: length=12,746,550 target=2,124,425 written=2,092,250
+
+Done: 49,217,588 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_50M_15contigs.bam
+  M_=16,379,344 F_=16,419,122 R_=16,419,122 clusters=1,445,765 mean_cluster_size=34.04
+[14:47:52]   indexing...
+[14:48:07]   running original...
+[14:50:29]   running fork -t1...
+[14:51:22]   running fork -t8...
+[14:52:11]   orig=142553ms fork-seq=52784ms(2.70x) fork-par=27164ms(5.25x) match=MATCH
+[14:52:11] ─────────────────────────────────────────────────────
+[14:52:11] Results: /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/results/scale_benchmark_20260712_143458.tsv
+scale  bam                      reads     orig_ms  fork_seq_ms  fork_par_ms  seq_speedup  par_speedup  orig_kept  fork_kept  match
+5M     scale_5M_15contigs.bam   4998354   19629    13231        13729        1.48x        1.43x        2168579    2168579    MATCH
+25M    scale_25M_15contigs.bam  24934972  65729    30460        19034        2.16x        3.45x        2167943    2167943    MATCH
+50M    scale_50M_15contigs.bam  49217588  142553   52784        27164        2.70x        5.25x        2169407    2169407    MATCH

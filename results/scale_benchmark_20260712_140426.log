@@ -1,0 +1,90 @@
+[14:04:26] Original JAR: DeDup-0.12.9.jar
+[14:04:26] Fork JAR:     DeDup-0.13.0.jar
+[14:04:26] ── scale=100000 (100K reads) ──
+[14:04:26]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_100K_15contigs.bam ...
+  chr1: length=31,113,820 target=10,371 written=10,371
+  chr2: length=30,268,614 target=10,090 written=10,090
+  chr3: length=24,782,379 target=8,261 written=8,262
+  chr4: length=23,772,439 target=7,924 written=7,925
+  chr5: length=22,688,102 target=7,563 written=7,563
+  chr6: length=21,346,814 target=7,116 written=7,116
+  chr7: length=19,914,577 target=6,638 written=6,638
+  chr8: length=18,138,987 target=6,046 written=6,047
+  chr9: length=17,296,153 target=5,765 written=5,765
+  chr10: length=16,721,597 target=5,574 written=5,575
+  chr11: length=16,882,717 target=5,628 written=5,628
+  chr12: length=16,656,345 target=5,552 written=5,552
+  chr13: length=14,292,907 target=4,764 written=4,764
+  chr14: length=13,378,000 target=4,459 written=4,459
+  chr15: length=12,746,550 target=4,249 written=4,249
+
+Done: 100,004 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_100K_15contigs.bam
+  M_=33,248 F_=33,378 R_=33,378 clusters=65,347 mean_cluster_size=1.53
+[14:04:29]   indexing...
+[14:04:29]   running original...
+[14:04:31]   running fork -t1...
+[14:04:32]   running fork -t8...
+[14:04:35]   orig=1540ms fork-seq=1523ms(1.01x) fork-par=1714ms(0.90x) match=MATCH
+[14:04:35] ── scale=1000000 (1M reads) ──
+[14:04:35]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_1M_15contigs.bam ...
+  chr1: length=31,113,820 target=103,713 written=103,714
+  chr2: length=30,268,614 target=100,895 written=100,896
+  chr3: length=24,782,379 target=82,608 written=82,608
+  chr4: length=23,772,439 target=79,241 written=79,242
+  chr5: length=22,688,102 target=75,627 written=75,627
+  chr6: length=21,346,814 target=71,156 written=71,156
+  chr7: length=19,914,577 target=66,382 written=66,383
+  chr8: length=18,138,987 target=60,463 written=60,465
+  chr9: length=17,296,153 target=57,654 written=57,655
+  chr10: length=16,721,597 target=55,739 written=55,740
+  chr11: length=16,882,717 target=56,276 written=56,276
+  chr12: length=16,656,345 target=55,521 written=55,522
+  chr13: length=14,292,907 target=47,643 written=47,643
+  chr14: length=13,378,000 target=44,593 written=44,593
+  chr15: length=12,746,550 target=42,488 written=42,488
+
+Done: 1,000,008 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_1M_15contigs.bam
+  M_=333,920 F_=333,044 R_=333,044 clusters=653,698 mean_cluster_size=1.53
+[14:04:48]   indexing...
+[14:04:48]   running original...
+[14:04:55]   running fork -t1...
+[14:05:00]   running fork -t8...
+[14:05:17]   orig=6353ms fork-seq=5366ms(1.18x) fork-par=7805ms(0.81x) match=MATCH
+[14:05:17] ── scale=10000000 (10M reads) ──
+[14:05:17]   reusing cached /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_10M_15contigs.bam
+[14:05:19]   running original...
+[14:05:50]   running fork -t1...
+[14:06:09]   running fork -t8...
+[14:06:46]   orig=31336ms fork-seq=18305ms(1.71x) fork-par=15590ms(2.01x) match=MATCH
+[14:06:46] ── scale=100000000 (100M reads) ──
+[14:06:46]   generating /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_100M_15contigs.bam ...
+  chr1: length=31,113,820 target=10,371,273 written=9,363,870
+  chr2: length=30,268,614 target=10,089,538 written=9,126,465
+  chr3: length=24,782,379 target=8,260,793 written=7,476,636
+  chr4: length=23,772,439 target=7,924,146 written=7,155,804
+  chr5: length=22,688,102 target=7,562,701 written=6,825,303
+  chr6: length=21,346,814 target=7,115,605 written=6,441,474
+  chr7: length=19,914,577 target=6,638,192 written=5,991,044
+  chr8: length=18,138,987 target=6,046,329 written=5,478,426
+  chr9: length=17,296,153 target=5,765,384 written=5,217,936
+  chr10: length=16,721,597 target=5,573,866 written=5,025,078
+  chr11: length=16,882,717 target=5,627,572 written=5,066,644
+  chr12: length=16,656,345 target=5,552,115 written=5,013,394
+  chr13: length=14,292,907 target=4,764,302 written=4,317,874
+  chr14: length=13,378,000 target=4,459,333 written=4,041,192
+  chr15: length=12,746,550 target=4,248,850 written=3,854,726
+
+Done: 90,395,866 reads written to /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/large_bam/scale_100M_15contigs.bam
+  M_=30,133,664 F_=30,131,101 R_=30,131,101 clusters=1,446,040 mean_cluster_size=62.51
+[14:16:49]   indexing...
+[14:17:14]   running original...
+[14:21:48]   running fork -t1...
+[14:23:17]   running fork -t8...
+[14:24:14]   orig=273370ms fork-seq=89421ms(3.06x) fork-par=35433ms(7.72x) match=MATCH
+[14:24:14] ─────────────────────────────────────────────────────
+[14:24:14] Results: /Users/sarahsa/Documents/vetmed/dedup_poc/DeDup_comparison/results/scale_benchmark_20260712_140426.tsv
+scale  bam                       reads     orig_ms  fork_seq_ms  fork_par_ms  seq_speedup  par_speedup  orig_kept  fork_kept  match
+100K   scale_100K_15contigs.bam  100004    1540     1523         1714         1.01x        0.90x        98087      98087      MATCH
+1M     scale_1M_15contigs.bam    1000008   6353     5366         7805         1.18x        0.81x        980029     980029     MATCH
+10M    scale_10M_15contigs.bam   9994825   31336    18305        15590        1.71x        2.01x        2168295    2168295    MATCH
+100M   scale_100M_15contigs.bam  90395866  273370   89421        35433        3.06x        7.72x        2169576    2169576    MATCH

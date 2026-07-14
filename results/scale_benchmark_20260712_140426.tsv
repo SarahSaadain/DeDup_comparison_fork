@@ -1,0 +1,5 @@
+scale	bam	reads	orig_ms	fork_seq_ms	fork_par_ms	seq_speedup	par_speedup	orig_kept	fork_kept	match
+100K	scale_100K_15contigs.bam	100004	1540	1523	1714	1.01x	0.90x	98087	98087	MATCH
+1M	scale_1M_15contigs.bam	1000008	6353	5366	7805	1.18x	0.81x	980029	980029	MATCH
+10M	scale_10M_15contigs.bam	9994825	31336	18305	15590	1.71x	2.01x	2168295	2168295	MATCH
+100M	scale_100M_15contigs.bam	90395866	273370	89421	35433	3.06x	7.72x	2169576	2169576	MATCH
