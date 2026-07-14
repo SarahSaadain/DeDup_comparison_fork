@@ -1,7 +1,7 @@
 # DeDup fork vs. original — comparison & benchmarks
 
-Infrastructure for verifying that the fork (`DeDup_fork/`) produces identical output to the
-original (`DeDup_original/`) and for measuring how much faster it is.
+Infrastructure for verifying that the fork ([`DeDup_fork/`](https://github.com/SarahSaadain/DeDup)) produces identical output to the
+original ([`DeDup_original/`](https://github.com/apeltzer/DeDup)) and for measuring how much faster it is.
 
 ## Scripts
 
