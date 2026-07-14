@@ -60,5 +60,4 @@ cd DeDup_comparison
 ./scale_benchmark.sh 100000 1000000 5000000 10000000 25000000 50000000 100000000
 ```
 
-Requires `DeDup-0.12.9.jar` (original) and `DeDup-0.13.0.jar` (fork) built — see the top-level
-`CLAUDE.md` for build commands.
+Requires `DeDup-0.12.9.jar` (original) and `DeDup-0.13.0.jar` (fork) built
