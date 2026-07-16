@@ -58,7 +58,7 @@ FORK_JAR=$(ls "$FORK_DIR"/build/libs/DeDup-*.jar 2>/dev/null | grep -v sources |
 log "Original JAR: $(basename "$ORIG_JAR")"
 log "Fork JAR:     $(basename "$FORK_JAR")"
 
-N_CPUS=$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
+N_CPUS=$(sysctl -n hw.logicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 time_ms() {
   local start end
