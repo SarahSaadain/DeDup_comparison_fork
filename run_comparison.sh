@@ -13,7 +13,17 @@
 #      merged-mode bucket-map fix targets; generated on demand)
 #
 # Usage:
-#   ./run_comparison.sh [--no-build] [--no-tests] [--no-large] [--no-pileup]
+#   ./run_comparison.sh [--no-build] [--no-tests] [--no-large] [--no-pileup] \
+#                        [--orig-jar PATH] [--fork-jar PATH]
+#
+#   By default the jars are built from sibling source checkouts (../DeDup_original,
+#   ../DeDup_fork relative to this script) via `gradle jar`. Pass --orig-jar/--fork-jar
+#   to point at prebuilt jars anywhere else instead — e.g. on a machine that only has the
+#   built jars, not the source checkouts:
+#   ./run_comparison.sh --orig-jar ~/DeDup-0.12.9.jar --fork-jar ~/DeDup-0.13.0.jar
+#   Passing either one implies --no-build --no-tests (there's no source checkout to build
+#   or run gradle test against), and the fixture-BAM correctness section (§2) will show no
+#   rows since those BAMs live under DeDup_fork's checkout.
 #
 # Outputs (in results/):
 #   report_TIMESTAMP.md   — human-readable summary
@@ -36,15 +46,28 @@ RAW_TSV="$RESULTS_DIR/raw_$TIMESTAMP.tsv"
 TMPDIR_CMP=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_CMP"' EXIT
 
+ORIG_JAR_ARG=""; FORK_JAR_ARG=""
 NO_BUILD=0; NO_TESTS=0; NO_LARGE=0; NO_PILEUP=0
-for arg in "$@"; do
-  case "$arg" in
-    --no-build) NO_BUILD=1 ;;
-    --no-tests) NO_TESTS=1 ;;
-    --no-large) NO_LARGE=1 ;;
-    --no-pileup) NO_PILEUP=1 ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-build) NO_BUILD=1; shift ;;
+    --no-tests) NO_TESTS=1; shift ;;
+    --no-large) NO_LARGE=1; shift ;;
+    --no-pileup) NO_PILEUP=1; shift ;;
+    --orig-jar) ORIG_JAR_ARG="$2"; shift 2 ;;
+    --orig-jar=*) ORIG_JAR_ARG="${1#*=}"; shift ;;
+    --fork-jar) FORK_JAR_ARG="$2"; shift 2 ;;
+    --fork-jar=*) FORK_JAR_ARG="${1#*=}"; shift ;;
+    *) shift ;;
   esac
 done
+
+# A jar-only machine has no DeDup_original/DeDup_fork source checkout for gradle
+# to build or test against, so passing either jar explicitly implies skipping both.
+if [[ -n "$ORIG_JAR_ARG" || -n "$FORK_JAR_ARG" ]]; then
+  NO_BUILD=1
+  NO_TESTS=1
+fi
 
 mkdir -p "$RESULTS_DIR"
 
@@ -142,10 +165,20 @@ if [[ $NO_BUILD -eq 0 ]]; then
   gradle -p "$FORK_DIR" jar -q
 fi
 
-ORIG_JAR=$(ls "$ORIG_DIR"/build/libs/DeDup-*.jar 2>/dev/null | head -1 || true)
-FORK_JAR=$(ls "$FORK_DIR"/build/libs/DeDup-*.jar 2>/dev/null | head -1 || true)
-[[ -z "$ORIG_JAR" ]] && { log "ERROR: original JAR missing (run without --no-build)"; exit 1; }
-[[ -z "$FORK_JAR" ]] && { log "ERROR: fork JAR missing (run without --no-build)"; exit 1; }
+if [[ -n "$ORIG_JAR_ARG" ]]; then
+  ORIG_JAR="$ORIG_JAR_ARG"
+  [[ -f "$ORIG_JAR" ]] || { log "ERROR: --orig-jar not found: $ORIG_JAR"; exit 1; }
+else
+  ORIG_JAR=$(ls "$ORIG_DIR"/build/libs/DeDup-*.jar 2>/dev/null | head -1 || true)
+fi
+if [[ -n "$FORK_JAR_ARG" ]]; then
+  FORK_JAR="$FORK_JAR_ARG"
+  [[ -f "$FORK_JAR" ]] || { log "ERROR: --fork-jar not found: $FORK_JAR"; exit 1; }
+else
+  FORK_JAR=$(ls "$FORK_DIR"/build/libs/DeDup-*.jar 2>/dev/null | head -1 || true)
+fi
+[[ -z "$ORIG_JAR" ]] && { log "ERROR: original JAR missing (run without --no-build, or pass --orig-jar)"; exit 1; }
+[[ -z "$FORK_JAR" ]] && { log "ERROR: fork JAR missing (run without --no-build, or pass --fork-jar)"; exit 1; }
 log "Original JAR: $(basename "$ORIG_JAR")"
 log "Fork JAR:     $(basename "$FORK_JAR")"
 
