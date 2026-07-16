@@ -4,13 +4,20 @@
 #
 # Generates (or reuses cached) synthetic BAMs at each requested scale, all
 # sharing the same 15-contig / 300Mbp synthetic genome, so duplication rate
-# grows naturally with depth (mirrors sequencing a library deeper). Runs
-# original, fork -t1, fork -t<ncpu> once each per scale and records wall time
-# + correctness (kept-read-name-set match).
+# grows naturally with depth (mirrors sequencing a library deeper). For each
+# scale AND each dedup mode (default prefix-based / merged -m), runs original,
+# fork -t1, fork -t<ncpu> once each and records wall time + correctness
+# (kept-read-name-set match).
+#
+# Merged mode (-m) is the path the fork actually optimizes (O(depth^2) →
+# O(group) bucket resolution), so its speedups are the interesting ones;
+# default mode is kept for coverage / regression.
 #
 # Usage:
 #   ./scale_benchmark.sh [scale ...]
-#   # default: 100000 1000000 5000000 10000000 25000000 50000000 100000000
+#   # default scales: 100000 1000000 5000000 10000000 25000000 50000000 100000000
+#   # modes default to "default merged"; override via env, e.g.
+#   DEDUP_MODES="merged" ./scale_benchmark.sh 1000000 10000000
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -29,6 +36,10 @@ mkdir -p "$LARGE_BAM_DIR" "$RESULTS_DIR"
 
 SCALES=("$@")
 [[ ${#SCALES[@]} -eq 0 ]] && SCALES=(100000 1000000 5000000 10000000 25000000 50000000 100000000)
+
+# Dedup modes to run per scale. "default" = prefix-based (M_/F_/R_); "merged" = -m
+# (both ends for every read, the fork's optimized path). Override via DEDUP_MODES.
+read -r -a MODES <<< "${DEDUP_MODES:-default merged}"
 
 log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$OUT_LOG" >&2; }
 
@@ -69,7 +80,7 @@ fmt_name() {
   fi
 }
 
-printf 'scale\tbam\treads\torig_ms\tfork_seq_ms\tfork_par_ms\tseq_speedup\tpar_speedup\torig_kept\tfork_kept\tmatch\n' > "$OUT_TSV"
+printf 'scale\tmode\tbam\treads\torig_ms\tfork_seq_ms\tfork_par_ms\tseq_speedup\tpar_speedup\torig_kept\tfork_kept\tmatch\n' > "$OUT_TSV"
 
 for scale in "${SCALES[@]}"; do
   name=$(fmt_name "$scale")
@@ -87,38 +98,47 @@ for scale in "${SCALES[@]}"; do
 
   reads=$(bam_read_count "$bam")
 
-  od=$(mktemp -d); fsd=$(mktemp -d); fpd=$(mktemp -d)
+  for mode in "${MODES[@]}"; do
+    # Merged mode adds -m to every invocation; default mode adds nothing. The
+    # ${mflag[@]+...} guard expands a possibly-empty array safely under set -u
+    # (portable back to bash 3.2 on macOS).
+    mflag=()
+    [[ "$mode" == "merged" ]] && mflag=(-m)
+    log "  ── mode=$mode ──"
 
-  log "  running original..."
-  orig_ms=$(time_ms "$JAVA" -jar "$ORIG_JAR" -i "$bam" -o "$od")
-  log "  running fork -t1..."
-  fseq_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$bam" -o "$fsd" -t 1)
-  log "  running fork -t$N_CPUS..."
-  fpar_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$bam" -o "$fpd" -t "$N_CPUS")
+    od=$(mktemp -d); fsd=$(mktemp -d); fpd=$(mktemp -d)
 
-  orig_bam=$(ls "$od"/*_rmdup.bam 2>/dev/null | head -1 || true)
-  fork_bam=$(ls "$fsd"/*_rmdup.bam 2>/dev/null | head -1 || true)
-  orig_kept="?"; fork_kept="?"; match="?"
-  if [[ -f "$orig_bam" && -f "$fork_bam" ]]; then
-    orig_kept=$(bam_read_count "$orig_bam")
-    fork_kept=$(bam_read_count "$fork_bam")
-    if [[ "$(bam_read_names "$orig_bam")" == "$(bam_read_names "$fork_bam")" ]]; then
-      match="MATCH"
-    else
-      match="DIFF"
+    log "  running original ($mode)..."
+    orig_ms=$(time_ms "$JAVA" -jar "$ORIG_JAR" -i "$bam" -o "$od" "${mflag[@]+"${mflag[@]}"}")
+    log "  running fork -t1 ($mode)..."
+    fseq_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$bam" -o "$fsd" -t 1 "${mflag[@]+"${mflag[@]}"}")
+    log "  running fork -t$N_CPUS ($mode)..."
+    fpar_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$bam" -o "$fpd" -t "$N_CPUS" "${mflag[@]+"${mflag[@]}"}")
+
+    orig_bam=$(ls "$od"/*_rmdup.bam 2>/dev/null | head -1 || true)
+    fork_bam=$(ls "$fsd"/*_rmdup.bam 2>/dev/null | head -1 || true)
+    orig_kept="?"; fork_kept="?"; match="?"
+    if [[ -f "$orig_bam" && -f "$fork_bam" ]]; then
+      orig_kept=$(bam_read_count "$orig_bam")
+      fork_kept=$(bam_read_count "$fork_bam")
+      if [[ "$(bam_read_names "$orig_bam")" == "$(bam_read_names "$fork_bam")" ]]; then
+        match="MATCH"
+      else
+        match="DIFF"
+      fi
     fi
-  fi
 
-  seq_speedup=$(python3 -c "print(f'{$orig_ms/$fseq_ms:.2f}x')" 2>/dev/null || echo "—")
-  par_speedup=$(python3 -c "print(f'{$orig_ms/$fpar_ms:.2f}x')" 2>/dev/null || echo "—")
+    seq_speedup=$(python3 -c "print(f'{$orig_ms/$fseq_ms:.2f}x')" 2>/dev/null || echo "—")
+    par_speedup=$(python3 -c "print(f'{$orig_ms/$fpar_ms:.2f}x')" 2>/dev/null || echo "—")
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$name" "$(basename "$bam")" "$reads" "$orig_ms" "$fseq_ms" "$fpar_ms" \
-    "$seq_speedup" "$par_speedup" "$orig_kept" "$fork_kept" "$match" >> "$OUT_TSV"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$name" "$mode" "$(basename "$bam")" "$reads" "$orig_ms" "$fseq_ms" "$fpar_ms" \
+      "$seq_speedup" "$par_speedup" "$orig_kept" "$fork_kept" "$match" >> "$OUT_TSV"
 
-  log "  orig=${orig_ms}ms fork-seq=${fseq_ms}ms(${seq_speedup}) fork-par=${fpar_ms}ms(${par_speedup}) match=$match"
+    log "  [$mode] orig=${orig_ms}ms fork-seq=${fseq_ms}ms(${seq_speedup}) fork-par=${fpar_ms}ms(${par_speedup}) match=$match"
 
-  rm -rf "$od" "$fsd" "$fpd"
+    rm -rf "$od" "$fsd" "$fpd"
+  done
 done
 
 log "─────────────────────────────────────────────────────"

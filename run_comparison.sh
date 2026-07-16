@@ -8,9 +8,12 @@
 #   3. Wall-clock time  (3-run median, sequential vs parallel)
 #   4. Peak memory      (/usr/bin/time -l, macOS RSS)
 #   5. Large-scale benchmark (10M reads / 15 contigs, generated on demand)
+#   6. Big local pileup benchmark, merged mode (one locus, thousands of
+#      duplicate groups sharing a start — the O(depth^2) shape the fork's
+#      merged-mode bucket-map fix targets; generated on demand)
 #
 # Usage:
-#   ./run_comparison.sh [--no-build] [--no-tests] [--no-large]
+#   ./run_comparison.sh [--no-build] [--no-tests] [--no-large] [--no-pileup]
 #
 # Outputs (in results/):
 #   report_TIMESTAMP.md   — human-readable summary
@@ -26,18 +29,20 @@ BAM_DIR="$FORK_DIR/src/test/resources"
 RESULTS_DIR="$SCRIPT_DIR/results"
 LARGE_BAM_DIR="$SCRIPT_DIR/large_bam"
 LARGE_BAM="$LARGE_BAM_DIR/large_10M_15contigs.bam"
+PILEUP_BAM="$LARGE_BAM_DIR/merged_big_pileup.bam"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPORT="$RESULTS_DIR/report_$TIMESTAMP.md"
 RAW_TSV="$RESULTS_DIR/raw_$TIMESTAMP.tsv"
 TMPDIR_CMP=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_CMP"' EXIT
 
-NO_BUILD=0; NO_TESTS=0; NO_LARGE=0
+NO_BUILD=0; NO_TESTS=0; NO_LARGE=0; NO_PILEUP=0
 for arg in "$@"; do
   case "$arg" in
     --no-build) NO_BUILD=1 ;;
     --no-tests) NO_TESTS=1 ;;
     --no-large) NO_LARGE=1 ;;
+    --no-pileup) NO_PILEUP=1 ;;
   esac
 done
 
@@ -281,6 +286,51 @@ else
   log "--no-large: skipping large-scale benchmark"
 fi
 
+# ── big local pileup benchmark (merged mode) ────────────────────────────────────
+# One locus, many distinct (start,end) duplicate groups sharing a start position,
+# each with several duplicate reads. Since the resolve trigger never fires while
+# same-start reads stream in, the whole pileup buffers at once and drains
+# group-by-group at end of stream — the exact shape that made the old merged-mode
+# duplicate resolution O(depth^2); the fork's bucket-map fast path resolves it in
+# O(depth). Mirrors DeDup_fork's MergedHighDepthLocusTest big-pileup case.
+pileup_reads="—"; pileup_orig_ms="—"; pileup_fseq_ms="—"; pileup_fpar_ms="—"
+pileup_orig_kept="—"; pileup_fork_kept="—"; pileup_match="—"
+if [[ $NO_PILEUP -eq 0 ]]; then
+  if [[ ! -f "$PILEUP_BAM" ]]; then
+    log "Big pileup BAM not found, generating (1000 groups x 40 reads/group, one locus)..."
+    mkdir -p "$LARGE_BAM_DIR"
+    python3 "$SCRIPT_DIR/generate_big_pileup_bam.py" -o "$PILEUP_BAM" \
+      --groups 1000 --reads-per-group 40 --seed 42
+  fi
+  [[ -f "${PILEUP_BAM}.bai" ]] || samtools index "$PILEUP_BAM"
+
+  log "Benchmarking big local pileup ($(basename "$PILEUP_BAM"), merged mode, single run per config)..."
+  PO=$(mktemp -d "$TMPDIR_CMP/po_XXXX")
+  PFS=$(mktemp -d "$TMPDIR_CMP/pfs_XXXX")
+  PFP=$(mktemp -d "$TMPDIR_CMP/pfp_XXXX")
+
+  pileup_orig_ms=$(time_ms "$JAVA" -jar "$ORIG_JAR" -i "$PILEUP_BAM" -o "$PO" -m)
+  pileup_fseq_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$PILEUP_BAM" -o "$PFS" -t 1 -m)
+  pileup_fpar_ms=$(time_ms "$JAVA" -jar "$FORK_JAR" -i "$PILEUP_BAM" -o "$PFP" -t "$N_CPUS" -m)
+
+  pileup_orig_bam=$(ls "$PO"/*_rmdup.bam 2>/dev/null | head -1 || true)
+  pileup_fork_bam=$(ls "$PFS"/*_rmdup.bam 2>/dev/null | head -1 || true)
+  if [[ -f "$pileup_orig_bam" && -f "$pileup_fork_bam" ]]; then
+    pileup_reads=$(bam_read_count "$PILEUP_BAM")
+    pileup_orig_kept=$(bam_read_count "$pileup_orig_bam")
+    pileup_fork_kept=$(bam_read_count "$pileup_fork_bam")
+    if [[ "$(bam_read_names "$pileup_orig_bam")" == "$(bam_read_names "$pileup_fork_bam")" ]]; then
+      pileup_match="MATCH"
+    else
+      pileup_match="DIFF"
+      bam_read_names "$pileup_orig_bam" > "$RESULTS_DIR/big_pileup_orig_names.txt"
+      bam_read_names "$pileup_fork_bam" > "$RESULTS_DIR/big_pileup_fork_names.txt"
+    fi
+  fi
+else
+  log "--no-pileup: skipping big local pileup benchmark"
+fi
+
 # ── report (Python for table formatting) ──────────────────────────────────────
 python3 - "$RAW_TSV" "$REPORT" \
   "$ORIG_TESTS" "$FORK_TESTS" \
@@ -290,6 +340,8 @@ python3 - "$RAW_TSV" "$REPORT" \
   "$(date '+%Y-%m-%d %H:%M:%S')" \
   "$large_reads" "$large_orig_ms" "$large_fseq_ms" "$large_fpar_ms" \
   "$large_orig_kept" "$large_fork_kept" "$large_match" \
+  "$pileup_reads" "$pileup_orig_ms" "$pileup_fseq_ms" "$pileup_fpar_ms" \
+  "$pileup_orig_kept" "$pileup_fork_kept" "$pileup_match" \
 <<'PYEOF'
 import sys, csv
 from pathlib import Path
@@ -312,6 +364,13 @@ large_fpar_ms    = sys.argv[15]
 large_orig_kept  = sys.argv[16]
 large_fork_kept  = sys.argv[17]
 large_match      = sys.argv[18]
+pileup_reads      = sys.argv[19]
+pileup_orig_ms    = sys.argv[20]
+pileup_fseq_ms    = sys.argv[21]
+pileup_fpar_ms    = sys.argv[22]
+pileup_orig_kept  = sys.argv[23]
+pileup_fork_kept  = sys.argv[24]
+pileup_match      = sys.argv[25]
 
 def parse_tests(t):
     tot, fa, er, sk = map(int, t)
@@ -425,6 +484,30 @@ lines += [
     "| Orig kept | Fork kept | Read names match? |",
     "|----------:|----------:|:------------------:|",
     f"| {large_orig_kept} | {large_fork_kept} | {large_match} |",
+    "",
+    "---",
+    "",
+    "## 7 · Big Local Pileup Benchmark (merged mode, single run)",
+    "",
+    "One locus, 1000 distinct duplicate groups sharing a start position (40 duplicate "
+    "reads each) — synthetic BAM from `generate_big_pileup_bam.py` (not committed, "
+    "cached in `large_bam/`). This is the O(depth^2) shape the fork's merged-mode "
+    "bucket-map fast path targets: same-start reads never trigger the resolve check "
+    "while streaming in, so the whole pileup buffers at once and only drains "
+    "group-by-group at end of stream, where the old code rescanned the full buffer "
+    "per group. Both jars run with `-m`.",
+    "",
+    f"Total reads: **{pileup_reads}**",
+    "",
+    "| Version                    | Wall-clock (ms) | speedup vs original |",
+    "|-----------------------------|-----------------:|---------------------:|",
+    f"| Original                   | {pileup_orig_ms} | — |",
+    f"| Fork sequential (−t 1)     | {pileup_fseq_ms} | {speedup(pileup_orig_ms, pileup_fseq_ms) if pileup_fseq_ms != '—' else '—'} |",
+    f"| Fork parallel (−t {n_cpus})       | {pileup_fpar_ms} | {speedup(pileup_orig_ms, pileup_fpar_ms) if pileup_fpar_ms != '—' else '—'} |",
+    "",
+    "| Orig kept | Fork kept | Read names match? |",
+    "|----------:|----------:|:------------------:|",
+    f"| {pileup_orig_kept} | {pileup_fork_kept} | {pileup_match} |",
     "",
 ]
 
