@@ -14,10 +14,16 @@
 # default mode is kept for coverage / regression.
 #
 # Usage:
-#   ./scale_benchmark.sh [scale ...]
+#   ./scale_benchmark.sh [--orig-jar PATH] [--fork-jar PATH] [scale ...]
 #   # default scales: 100000 1000000 5000000 10000000 25000000 50000000 100000000
 #   # modes default to "default merged"; override via env, e.g.
 #   DEDUP_MODES="merged" ./scale_benchmark.sh 1000000 10000000
+#
+#   By default the jars are auto-discovered as sibling checkouts
+#   (../DeDup_original, ../DeDup_fork relative to this script) built via
+#   `gradle jar`. Pass --orig-jar/--fork-jar to point at jars anywhere else —
+#   e.g. on a machine that only has the built jars, not the source checkouts:
+#   ./scale_benchmark.sh --orig-jar ~/DeDup-0.12.9.jar --fork-jar ~/DeDup-0.13.0.jar 1000000
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -33,6 +39,20 @@ OUT_LOG="$RESULTS_DIR/scale_benchmark_$TIMESTAMP.log"
 GENOME_LENGTH=300000000
 
 mkdir -p "$LARGE_BAM_DIR" "$RESULTS_DIR"
+
+# Pull --orig-jar/--fork-jar out of the argument list before what's left is
+# treated as the scale list, so both styles can be combined freely.
+ORIG_JAR_ARG=""; FORK_JAR_ARG=""; POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --orig-jar) ORIG_JAR_ARG="$2"; shift 2 ;;
+    --orig-jar=*) ORIG_JAR_ARG="${1#*=}"; shift ;;
+    --fork-jar) FORK_JAR_ARG="$2"; shift 2 ;;
+    --fork-jar=*) FORK_JAR_ARG="${1#*=}"; shift ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 
 SCALES=("$@")
 [[ ${#SCALES[@]} -eq 0 ]] && SCALES=(100000 1000000 5000000 10000000 25000000 50000000 100000000)
@@ -52,9 +72,19 @@ for candidate in /usr/local/opt/java/bin/java /opt/homebrew/opt/java/bin/java ja
 done
 [[ -z "$JAVA" ]] && { log "ERROR: No Java 11+ found"; exit 1; }
 
-ORIG_JAR=$(ls "$ORIG_DIR"/build/libs/DeDup-*.jar 2>/dev/null | grep -v sources | head -1 || true)
-FORK_JAR=$(ls "$FORK_DIR"/build/libs/DeDup-*.jar 2>/dev/null | grep -v sources | head -1 || true)
-[[ -z "$ORIG_JAR" || -z "$FORK_JAR" ]] && { log "ERROR: build JARs first (gradle jar in both dirs)"; exit 1; }
+if [[ -n "$ORIG_JAR_ARG" ]]; then
+  ORIG_JAR="$ORIG_JAR_ARG"
+  [[ -f "$ORIG_JAR" ]] || { log "ERROR: --orig-jar not found: $ORIG_JAR"; exit 1; }
+else
+  ORIG_JAR=$(ls "$ORIG_DIR"/build/libs/DeDup-*.jar 2>/dev/null | grep -v sources | head -1 || true)
+fi
+if [[ -n "$FORK_JAR_ARG" ]]; then
+  FORK_JAR="$FORK_JAR_ARG"
+  [[ -f "$FORK_JAR" ]] || { log "ERROR: --fork-jar not found: $FORK_JAR"; exit 1; }
+else
+  FORK_JAR=$(ls "$FORK_DIR"/build/libs/DeDup-*.jar 2>/dev/null | grep -v sources | head -1 || true)
+fi
+[[ -z "$ORIG_JAR" || -z "$FORK_JAR" ]] && { log "ERROR: JARs not found — build them first (gradle jar in both dirs) or pass --orig-jar/--fork-jar"; exit 1; }
 log "Original JAR: $(basename "$ORIG_JAR")"
 log "Fork JAR:     $(basename "$FORK_JAR")"
 
