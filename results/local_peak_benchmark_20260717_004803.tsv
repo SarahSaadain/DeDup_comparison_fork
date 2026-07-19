@@ -1,0 +1,9 @@
+scale	scenario	bam	reads	orig_ms	fork_seq_ms	fork_par_ms	seq_speedup	par_speedup	orig_kept	fork_kept	match
+20K	merged	peak_merged_20K.bam	20000	900	293	330	3.07x	2.73x	500	500	MATCH
+20K	default	peak_staggered_20K.bam	19800	4590	434	520	10.58x	8.83x	1293	1293	MATCH
+50K	merged	peak_merged_50K.bam	50000	3532	420	541	8.41x	6.53x	1250	1250	MATCH
+50K	default	peak_staggered_50K.bam	49800	14349	896	1083	16.01x	13.25x	1350	1350	MATCH
+100K	merged	peak_merged_100K.bam	100000	13589	834	1275	16.29x	10.66x	2500	2500	MATCH
+100K	default	peak_staggered_100K.bam	99900	30364	1291	1506	23.52x	20.16x	1349	1349	MATCH
+200K	merged	peak_merged_200K.bam	200000	55911	2285	3040	24.47x	18.39x	5000	5000	MATCH
+200K	default	peak_staggered_200K.bam	199800	61967	2086	2451	29.71x	25.28x	1384	1384	MATCH

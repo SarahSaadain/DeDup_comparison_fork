@@ -1,37 +1,32 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
-# DeDup local-peak scaling benchmark — original vs fork across duplicate-group
-# counts at a single high-depth locus (the O(depth^2) shape, not genome-wide
-# throughput — see scale_benchmark.sh for that).
+# DeDup local-peak scaling benchmark — original vs fork at a single high-depth
+# locus (the O(depth^2)-shaped bug both fixes target — not genome-wide
+# throughput, see scale_benchmark.sh for that).
 #
-# Runs TWO scenarios at each requested group count:
-#   merged  — generate_big_pileup_bam.py, one locus, all reads share the exact
+# Runs TWO scenarios, each swept across a --scale list of total read counts:
+#   merged  — generate_big_pileup_bam.py: one locus, all reads share the exact
 #             same start, distinct lengths give `groups` distinct (start,end)
-#             duplicate groups of `--reads-per-group` reads each. Run with -m.
-#             This is the fork's merged-mode bucket-map fast path (see
-#             dedup-merged-oN2-fix memory).
-#   default — generate_local_peak_bam.py, one locus, `groups` distinct 1bp-apart
-#             F_ start positions with `--reads-per-position` duplicate reads
-#             each, read-len sized so the first read still overlaps the last
-#             position (nothing resolves until end of stream). Run without -m.
-#             This is the fork's non-merged startIndex/endIndex narrowing,
-#             added alongside RecordBufferHeap.
-#
-# Both scenarios keep reads-per-group/-position FIXED and scale the number of
-# distinct groups, since that's the dimension the old O(depth^2) buffer
-# rescan is quadratic in (see each generator's docstring).
+#             duplicate groups of READS_PER_GROUP reads each. Run with -m.
+#             Targets the merged-mode bucket-map fast path (see
+#             dedup-merged-oN2-fix memory / checkForDuplicationMerged).
+#   default — generate_staggered_pileup_bam.py: POSITIONS distinct start
+#             positions and LENGTH held fixed (LENGTH > POSITIONS so the whole
+#             band stays buffered at once); each scale's --reads controls
+#             reads-per-position, i.e. depth. Read length is deliberately
+#             decoupled from --reads here (see that generator's docstring) —
+#             scaling length together with read count would make total BAM
+#             I/O volume O(N^2) and mask the dedup algorithm's own cost. Run
+#             without -m. Targets checkForDuplication()'s non-merged path
+#             (RecordBufferHeap + startIndex/endIndex candidate narrowing).
 #
 # Usage:
-#   ./local_peak_benchmark.sh [--orig-jar PATH] [--fork-jar PATH] [group-count ...]
-#   # default group counts: 500 1000 2000 4000 8000
+#   ./local_peak_benchmark.sh [scale ...]
+#   # default scales: 20000 50000 100000 200000 400000 800000
 #   # scenarios default to "merged default"; override via env, e.g.
-#   PEAK_SCENARIOS="default" ./local_peak_benchmark.sh 2000 4000
-#
-#   By default the jars are auto-discovered as sibling checkouts
-#   (../DeDup_original, ../DeDup_fork relative to this script) built via
-#   `gradle jar`. Pass --orig-jar/--fork-jar to point at jars anywhere else —
-#   e.g. on a machine that only has the built jars, not the source checkouts:
-#   ./local_peak_benchmark.sh --orig-jar ~/DeDup-0.12.9.jar --fork-jar ~/DeDup-0.13.0.jar 2000
+#   PEAK_SCENARIOS="default" ./local_peak_benchmark.sh 100000 400000
+#   # jar paths default to sibling checkouts; override for portability:
+#   ./local_peak_benchmark.sh --orig-jar PATH --fork-jar PATH 100000
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -45,13 +40,14 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 OUT_TSV="$RESULTS_DIR/local_peak_benchmark_$TIMESTAMP.tsv"
 OUT_LOG="$RESULTS_DIR/local_peak_benchmark_$TIMESTAMP.log"
 
-READS_PER_GROUP=40     # merged scenario: fixed duplicate reads per (start,end) group
-READS_PER_POSITION=10  # default scenario: fixed duplicate reads per start position
+READS_PER_GROUP=40   # merged scenario: fixed duplicate reads per (start,end) group; scale via --groups
+STAGGER_POSITIONS=300 # default scenario: fixed distinct start positions (generate_staggered_pileup_bam.py)
+STAGGER_LENGTH=400     # default scenario: fixed read length (must exceed STAGGER_POSITIONS)
 
 mkdir -p "$LARGE_BAM_DIR" "$RESULTS_DIR"
 
 # Pull --orig-jar/--fork-jar out of the argument list before what's left is
-# treated as the group-count list, so both styles can be combined freely.
+# treated as the scale list, so both styles can be combined freely.
 ORIG_JAR_ARG=""; FORK_JAR_ARG=""; POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -64,8 +60,8 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 
-GROUP_COUNTS=("$@")
-[[ ${#GROUP_COUNTS[@]} -eq 0 ]] && GROUP_COUNTS=(500 1000 2000 4000 8000)
+SCALES=("$@")
+[[ ${#SCALES[@]} -eq 0 ]] && SCALES=(20000 50000 100000 200000 400000 800000)
 
 read -r -a SCENARIOS <<< "${PEAK_SCENARIOS:-merged default}"
 
@@ -109,16 +105,26 @@ time_ms() {
 bam_read_count() { samtools view -c -F 4 "$1"; }
 bam_read_names() { samtools view "$1" | cut -f1 | sort; }
 
-printf 'groups\tscenario\tbam\treads\torig_ms\tfork_seq_ms\tfork_par_ms\tseq_speedup\tpar_speedup\torig_kept\tfork_kept\tmatch\n' > "$OUT_TSV"
+fmt_name() {
+  local scale="$1"
+  if   (( scale >= 1000000 )); then printf '%sM' "$((scale / 1000000))"
+  elif (( scale >= 1000 ));    then printf '%sK' "$((scale / 1000))"
+  else printf '%s' "$scale"
+  fi
+}
 
-for groups in "${GROUP_COUNTS[@]}"; do
+printf 'scale\tscenario\tbam\treads\torig_ms\tfork_seq_ms\tfork_par_ms\tseq_speedup\tpar_speedup\torig_kept\tfork_kept\tmatch\n' > "$OUT_TSV"
+
+for scale in "${SCALES[@]}"; do
+  name=$(fmt_name "$scale")
   for scenario in "${SCENARIOS[@]}"; do
-    log "── groups=$groups scenario=$scenario ──"
+    log "── scale=$scale ($name) scenario=$scenario ──"
 
     if [[ "$scenario" == "merged" ]]; then
-      bam="$LARGE_BAM_DIR/peak_merged_${groups}g${READS_PER_GROUP}.bam"
+      groups=$(( scale / READS_PER_GROUP ))
+      bam="$LARGE_BAM_DIR/peak_merged_${name}.bam"
       if [[ ! -f "$bam" ]]; then
-        log "  generating $bam ..."
+        log "  generating $bam (groups=$groups, reads-per-group=$READS_PER_GROUP) ..."
         python3 "$SCRIPT_DIR/generate_big_pileup_bam.py" -o "$bam" \
           --groups "$groups" --reads-per-group "$READS_PER_GROUP" --seed 42 2>>"$OUT_LOG"
       else
@@ -126,11 +132,11 @@ for groups in "${GROUP_COUNTS[@]}"; do
       fi
       mflag=(-m)
     else
-      bam="$LARGE_BAM_DIR/peak_local_${groups}p${READS_PER_POSITION}.bam"
+      bam="$LARGE_BAM_DIR/peak_staggered_${name}.bam"
       if [[ ! -f "$bam" ]]; then
-        log "  generating $bam ..."
-        python3 "$SCRIPT_DIR/generate_local_peak_bam.py" -o "$bam" \
-          --positions "$groups" --reads-per-position "$READS_PER_POSITION" --seed 42 2>>"$OUT_LOG"
+        log "  generating $bam (positions=$STAGGER_POSITIONS, length=$STAGGER_LENGTH, reads=$scale) ..."
+        python3 "$SCRIPT_DIR/generate_staggered_pileup_bam.py" -o "$bam" \
+          --reads "$scale" --positions "$STAGGER_POSITIONS" --length "$STAGGER_LENGTH" --seed 7 2>>"$OUT_LOG"
       else
         log "  reusing cached $bam"
       fi
@@ -166,10 +172,10 @@ for groups in "${GROUP_COUNTS[@]}"; do
     par_speedup=$(python3 -c "print(f'{$orig_ms/$fpar_ms:.2f}x')" 2>/dev/null || echo "—")
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$groups" "$scenario" "$(basename "$bam")" "$reads" "$orig_ms" "$fseq_ms" "$fpar_ms" \
+      "$name" "$scenario" "$(basename "$bam")" "$reads" "$orig_ms" "$fseq_ms" "$fpar_ms" \
       "$seq_speedup" "$par_speedup" "$orig_kept" "$fork_kept" "$match" >> "$OUT_TSV"
 
-    log "  [$scenario] groups=$groups reads=$reads orig=${orig_ms}ms fork-seq=${fseq_ms}ms(${seq_speedup}) fork-par=${fpar_ms}ms(${par_speedup}) match=$match"
+    log "  [$scenario] scale=$name reads=$reads orig=${orig_ms}ms fork-seq=${fseq_ms}ms(${seq_speedup}) fork-par=${fpar_ms}ms(${par_speedup}) match=$match"
 
     rm -rf "$od" "$fsd" "$fpd"
   done

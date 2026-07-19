@@ -29,6 +29,15 @@ original ([`DeDup_original/`](https://github.com/apeltzer/DeDup)) and for measur
   TSV carries a `mode` column; override the set of modes with `DEDUP_MODES` (e.g.
   `DEDUP_MODES="merged" ./scale_benchmark.sh 5000000`). Results go to
   `results/scale_benchmark_<timestamp>.tsv` (+ `.log`).
+- `generate_staggered_pileup_bam.py` — fabricates a **non-merged** staggered pileup BAM: many
+  distinct start positions across a narrow band (`--positions`, default 300), each with several
+  reads piled on (`--reads`, scaled via reads-per-position). Read length (`--length`) is fixed
+  and decoupled from `--reads` — depth scales via reads-per-position instead — which matters:
+  scaling length together with read count (an earlier attempt) makes total BAM I/O volume
+  O(N²) and masks the dedup algorithm's own complexity. This is the non-merged analogue of
+  `generate_big_pileup_bam.py`'s single-locus shape, targeting `checkForDuplication()`'s
+  non-merged path (candidate narrowing via `RecordBufferHeap`, see below) rather than the
+  merged-mode bucket-map fast path.
 
 Generated BAMs live in `large_bam/` (gitignored, multi-GB) — delete freely and regenerate on
 demand; generation is deterministic via `--seed`.
@@ -39,6 +48,11 @@ Fork output is **byte-identical** to the original (kept reads, `.log` stats, `.h
 - all 16 fixture-BAM test scenarios (sequential + parallel fork modes)
 - every scale in the benchmark below, 100K → ~90M reads
 - the big local pileup scenario (below), merged mode
+- the staggered non-merged pileup scenario (below), default mode, 20K and 160K reads
+- `RecordBufferHeapDifferentialTest` (in `DeDup_fork`): 2000 randomized operation sequences
+  confirming the fork's own heap matches `java.util.PriorityQueue`'s array layout exactly,
+  including tie-heavy cases — the gate that gives the non-merged fix below its byte-identical
+  guarantee
 
 ## Scaling benchmark (2026-07-12, default mode)
 
@@ -87,6 +101,27 @@ scenario is a single contig, so `-t4` can't split the work — it only adds thre
 on top of the same single-threaded bucket-map resolution. This is expected and mirrors the
 small-file crossover seen in the scaling benchmark above.
 
+## Staggered non-merged pileup benchmark (2026-07-16, default mode)
+
+300 distinct start positions in a narrow band, fixed 400bp read length, depth scaled via
+reads-per-position — the non-merged analogue of the merged-mode pileup above, targeting
+`checkForDuplication()`'s non-merged path. Before this fix, that path did a full linear scan
+of `recordBuffer` per anchor resolution regardless of mode; the fix (`RecordBufferHeap` +
+`startIndex`/`endIndex` coordinate narrowing) brings it down to O(candidates sharing the
+anchor's exact start or end). Single run per config, `-t1`.
+
+| reads | orig | fork -t1 | speedup | match |
+|---|---|---|---|---|
+| 19,800 | 4.98s | 0.38s | **13.1×** | MATCH |
+| 159,900 | 56.88s | 1.38s | **41.2×** | MATCH |
+
+Unlike a constant-factor speedup, the ratio **grows** with depth (13× → 41× as reads go 8×) —
+the fork's own time barely grows (0.38s → 1.38s, well under linear) while the original's grows
+much faster than linear, confirming this closed the O(depth²) gap rather than just cutting its
+constant. See `generate_staggered_pileup_bam.py`'s docstring for why read length must stay
+fixed (decoupled from read count) for this comparison to actually isolate algorithm cost
+instead of BAM I/O volume.
+
 ## Reproducing
 
 ```bash
@@ -101,6 +136,12 @@ DEDUP_MODES="merged" ./scale_benchmark.sh 100000 1000000 5000000 10000000 250000
 ./run_comparison.sh
 # Skip the 10M large-scale section and/or the big-pileup section:
 ./run_comparison.sh --no-large --no-pileup
+
+# Staggered non-merged pileup benchmark (not yet wired into run_comparison.sh — run directly):
+python3 generate_staggered_pileup_bam.py -o large_bam/staggered_pileup.bam \
+  --reads 160000 --positions 300 --length 400 --seed 7
+java -jar ../DeDup_original/build/libs/DeDup-0.12.9.jar -i large_bam/staggered_pileup.bam -o /tmp/orig/
+java -jar ../DeDup_fork/build/libs/DeDup-0.13.0.jar -i large_bam/staggered_pileup.bam -o /tmp/fork/ -t 1
 ```
 
 Requires `DeDup-0.12.9.jar` (original) and `DeDup-0.13.0.jar` (fork) built
